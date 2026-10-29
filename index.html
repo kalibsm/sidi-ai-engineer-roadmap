@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A 3D forest village roadmap from full stack developer to AI engineer.">
+<title>AI Engineer Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&display=swap">
+<style>
+/* Layout: a full-screen 3D forest village (one house per level) with a glass HUD on top; quests open in a sheet.
+   Deliberately single-theme: a dusk forest that looks the same on any host theme. */
+:root {
+  color-scheme: dark;
+  --night: #10241F;
+  --panel: rgba(14, 33, 28, 0.94);
+  --panel-2: rgba(255, 255, 255, 0.05);
+  --ink: #F6F1E4;
+  --muted: #A9BFB5;
+  --line: rgba(246, 241, 228, 0.16);
+  --glow: #FFC872;
+  --glow-deep: #D9962C;
+  --good: #7FE0A8;
+  --boss: #FF7A66;
+  --font-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --font-body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; overflow: hidden; }
+button { font: inherit; color: inherit; }
+button:focus-visible, input:focus-visible + .box, a:focus-visible { outline: 3px solid var(--glow); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; margin: 0; text-wrap: balance; }
+p { margin: 0; }
+#world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#world.dragging { cursor: grabbing; }
+
+/* Title screen */
+.title { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; text-align: center;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(ellipse at 50% 30%, rgba(16,36,31,.35), rgba(8,20,17,.9) 70%); transition: opacity .6s; }
+.title.gone { opacity: 0; pointer-events: none; }
+.title-inner { display: grid; gap: 16px; justify-items: center; max-width: 560px; }
+.title .kicker { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--glow); }
+.title h1 { font-size: clamp(38px, 8vw, 68px); line-height: 1.02; }
+.title h1 em { font-style: normal; color: var(--glow); text-shadow: 0 0 24px rgba(255,200,114,.55); }
+.title .tag { color: var(--muted); font-size: 17px; }
+.title .loading { font-size: 14px; color: var(--muted); min-height: 21px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; }
+.btn { background: var(--glow); color: #1A120A; border: 0; border-radius: 999px; padding: 12px 22px; font-weight: 700; cursor: pointer; box-shadow: 0 0 28px rgba(255,200,114,.35); transition: transform .12s; }
+.btn:hover { transform: translateY(-1px); }
+.btn[disabled] { opacity: .5; cursor: progress; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); box-shadow: none; }
+
+/* HUD */
+.hud { position: fixed; z-index: 20; top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.glass { background: rgba(10, 26, 22, .72); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.me { padding: 10px 14px; display: grid; gap: 6px; width: min(330px, 62vw); }
+.me .top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.me b { font-family: var(--font-display); font-weight: 400; font-size: 18px; }
+.me .rank { color: var(--glow); font-size: 13px; font-weight: 700; }
+.xpbar { height: 8px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; }
+.xpbar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--glow-deep), var(--glow)); transition: width .5s; }
+.me .sub { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.tool { padding: 9px 14px; border-radius: 999px; cursor: pointer; font-size: 14px; font-weight: 600; border: 1px solid var(--line); background: rgba(10, 26, 22, .72); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.tool[aria-pressed="true"] { border-color: var(--glow); color: var(--glow); }
+
+.prompt { position: fixed; z-index: 20; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 10px 12px 10px 18px; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px); }
+.prompt .btn { padding: 9px 16px; }
+.prompt .what { font-size: 14px; }
+.prompt .what b { color: var(--glow); }
+.hint { position: fixed; z-index: 15; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); font-size: 13px; color: var(--muted); padding: 8px 14px; white-space: nowrap; }
+.joy { position: fixed; z-index: 25; left: max(22px, env(safe-area-inset-left, 0px)); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); width: 116px; height: 116px; border-radius: 50%; touch-action: none; display: none; }
+.joy i { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: rgba(255,200,114,.85); box-shadow: 0 0 20px rgba(255,200,114,.5); }
+body.touch .joy { display: block; }
+body.touch .hint { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); white-space: normal; max-width: 46vw; text-align: right; }
+body.touch .prompt { left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+
+/* Word card */
+.word { position: fixed; z-index: 30; left: 50%; top: calc(86px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); width: min(420px, calc(100vw - 32px)); padding: 16px 18px; display: grid; gap: 6px; }
+.word h3 { font-size: 22px; color: var(--glow); text-shadow: 0 0 18px rgba(255,200,114,.4); }
+.word p { color: var(--ink); font-size: 14.5px; }
+.word .x { position: absolute; top: 8px; right: 8px; }
+
+/* Sheets */
+.sheet-wrap { position: fixed; inset: 0; z-index: 40; background: rgba(5, 14, 12, .55); display: grid; justify-items: end; }
+.sheet { height: 100%; width: min(640px, 100vw); background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)) 22px; display: grid; gap: 18px; align-content: start; animation: slideIn .35s cubic-bezier(.2,.8,.2,1); }
+@keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.x { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; font-size: 20px; line-height: 1; }
+.sheet-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.eyebrow { font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--glow); font-weight: 700; }
+.sheet h2 { font-size: clamp(26px, 5vw, 34px); margin-top: 4px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+.pill.gold { border-color: var(--glow); color: var(--glow); }
+.pill.good { border-color: var(--good); color: var(--good); }
+.pill.late { border-color: var(--boss); color: var(--boss); }
+.mission { color: var(--muted); }
+.mission b { color: var(--ink); }
+.group-label { font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.qlist { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
+.quest { position: relative; display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
+.quest:hover { border-color: rgba(246,241,228,.35); }
+.quest input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.box { width: 24px; height: 24px; border-radius: 8px; border: 2px solid var(--muted); display: grid; place-items: center; margin-top: 1px; }
+.box svg { width: 15px; height: 15px; opacity: 0; }
+.quest .t { font-weight: 700; }
+.quest .d { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.quest .when { font-size: 12px; color: var(--muted); }
+.quest .xp { font-size: 12.5px; font-weight: 700; color: var(--glow); white-space: nowrap; padding-top: 2px; }
+.quest.is-done { background: rgba(127, 224, 168, .08); border-color: rgba(127, 224, 168, .4); }
+.quest.is-done .box { background: var(--good); border-color: var(--good); }
+.quest.is-done .box svg { opacity: 1; }
+.quest.is-done .t { text-decoration: line-through; color: var(--muted); }
+.quest.is-done .xp { color: var(--good); }
+.boss { border-color: rgba(255,122,102,.5); background: linear-gradient(135deg, rgba(255,122,102,.12), rgba(255,122,102,.02)); }
+.boss .t::before { content: "Boss · "; color: var(--boss); }
+.boss .xp { color: var(--boss); }
+.boss.sealed { cursor: not-allowed; opacity: .6; }
+.boss.sealed .box { border-style: dashed; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; }
+.card h3 { font-size: 16px; }
+.card ul, .card ol { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; display: grid; gap: 3px; }
+.locked-msg { display: grid; gap: 12px; justify-items: start; padding: 18px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); }
+.levels { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.lv { width: 100%; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); cursor: pointer; }
+.lv .num { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-family: var(--font-display); font-size: 20px; border: 1.5px solid var(--line); }
+.lv.cur .num { border-color: var(--glow); color: var(--glow); box-shadow: 0 0 16px rgba(255,200,114,.35); }
+.lv.clear .num { background: var(--glow); color: #1A120A; border-color: var(--glow); }
+.lv.lock { opacity: .6; }
+.lv .nm { font-weight: 700; }
+.lv .st { font-size: 13px; color: var(--muted); }
+.small { font-size: 13px; color: var(--muted); }
+.help { display: grid; gap: 12px; }
+.help h3 { font-size: 18px; }
+.help ul { margin: 0; padding-left: 18px; color: var(--muted); display: grid; gap: 4px; }
+kbd { font-family: ui-monospace, Menlo, monospace; font-size: 12px; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line); color: var(--ink); }
+
+.float { position: fixed; z-index: 70; pointer-events: none; font-weight: 700; font-size: 18px; color: var(--glow); text-shadow: 0 0 12px rgba(255,200,114,.6); animation: floatUp 1s ease-out forwards; }
+@keyframes floatUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-44px); } }
+.toast { position: fixed; z-index: 80; left: 50%; top: calc(84px + env(safe-area-inset-top, 0px)); transform: translateX(-50%) translateY(-10px); opacity: 0; padding: 10px 18px; border-radius: 999px; font-weight: 700; transition: opacity .25s, transform .25s; max-width: calc(100vw - 32px); text-align: center; pointer-events: none; }
+.toast.show { opacity: 1; transform: translateX(-50%); }
+.celebrate { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: rgba(4, 12, 10, .72); padding: 16px; }
+.celebrate canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cele-card { position: relative; border-radius: 22px; padding: 28px 24px; max-width: 430px; width: 100%; text-align: center; display: grid; gap: 12px; justify-items: center; background: var(--panel); border: 1px solid var(--glow); box-shadow: 0 0 60px rgba(255,200,114,.25); animation: pop .45s cubic-bezier(.2,1.4,.4,1); }
+.cele-card .big { font-family: var(--font-display); font-size: 34px; color: var(--glow); line-height: 1.1; }
+.cele-card .stars { font-size: 28px; letter-spacing: 6px; color: var(--glow); }
+@keyframes pop { from { transform: scale(.75); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.nogl { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); }
+
+@media (max-width: 560px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .quest { grid-template-columns: 26px minmax(0, 1fr); }
+  .quest .xp { grid-column: 2; }
+  .tool { padding: 8px 11px; font-size: 13px; }
+  .me { width: min(240px, 54vw); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<canvas id="world" aria-label="A 3D forest village. Each house is one level of the roadmap. Use the Levels button for a list."></canvas>
+<div class="nogl" id="nogl" hidden><p>3D is not available here. Use <b>Levels</b> at the top to open each level.</p></div>
+
+<div class="hud" id="hud" hidden>
+  <div class="me glass">
+    <div class="top"><b>Sidi</b><span class="rank" id="rank">Full Stack Dev</span></div>
+    <div class="xpbar"><i id="xpfill"></i></div>
+    <div class="sub" id="xptext">0 / 5,000 XP</div>
+    <div class="sub" id="now"></div>
+  </div>
+  <div class="tools">
+    <button class="tool" id="bLevels" type="button">Levels</button>
+    <button class="tool" id="bHelp" type="button">Help</button>
+    <button class="tool" id="bCalm" type="button" aria-pressed="false">Calm mode</button>
+  </div>
+</div>
+<div class="hint glass" id="hint" hidden>WASD to walk · drag to look · click a house to go there</div>
+<div class="prompt glass" id="prompt" hidden><span class="what" id="promptWhat"></span><button class="btn" id="enterBtn" type="button">Enter <kbd style="border-color:rgba(26,18,10,.35);color:#1A120A">E</kbd></button></div>
+<div class="joy glass" id="joy" aria-hidden="true"><i id="knob"></i></div>
+<div class="word glass" id="word" hidden role="dialog" aria-label="Term"><button class="x" type="button" id="wordX" aria-label="Close">×</button><h3 id="wordT"></h3><p id="wordD"></p></div>
+<div class="toast glass" id="toast" role="status"></div>
+
+<div class="title" id="title">
+  <div class="title-inner">
+    <span class="kicker">Sidi's roadmap · Nov 2026 to Feb 2027</span>
+    <h1>The road to <em>AI Engineer</em></h1>
+    <p class="tag">Six houses. One path. Clear each house to light the next.</p>
+    <p class="loading" id="loading">Preparing your world…</p>
+    <div class="row">
+      <button class="btn" id="startBtn" type="button" disabled>Enter the village</button>
+      <button class="btn ghost" id="listBtn" type="button">See the levels</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ================= Roadmap data ================= */
+const LEVELS = [
+  { n: 0, id: 'level-0', zone: 'Bootcamp Village', name: 'Profile fixes', start: '2026-10-29', end: '2026-11-01', roof: 0xC97A45,
+    mission: 'Clean up your LinkedIn before the journey. No AI work needed: finish these this week.',
+    groups: [{ quests: [
+      { id: 'pr-1', t: 'Fix the typos in every experience bullet', d: 'About 25 of them, like “interfacs”, “Net.js” and “Prisma OR”.' },
+      { id: 'pr-2', t: 'Retitle the bank role “Web Developer Intern”', d: 'So the title matches the description.' },
+      { id: 'pr-3', t: 'End date on foras khadra, SLASH Tech set to part-time', d: 'Removes the overlapping-jobs question.' },
+      { id: 'pr-4', t: 'Add Python, Node.js, TypeScript and a Languages section', d: 'Your Russian counts for remote international roles.' },
+      { id: 'pr-5', t: 'Open to Work for recruiters only', d: 'Then take it out of your headline.' }
+    ] }],
+    boss: { id: 'boss-0', t: 'The recruiter scan', d: 'Read your whole profile top to bottom as a recruiter would: no typos, no overlaps, every title matches its description.' },
+    gear: [] },
+  { n: 1, id: 'level-1', zone: 'Python Plains', name: 'Foundations', start: '2026-11-02', end: '2026-11-22', roof: 0x6FAF5A,
+    mission: 'Write Python as comfortably as TypeScript, and understand models well enough to explain them in an interview.',
+    groups: [{ quests: [
+      { id: 'p1-1', t: 'Python for a JavaScript developer', d: 'Type hints, virtual environments, uv or pip, async. Rebuild a Node.js API you know in FastAPI.', w: 'days 1–6' },
+      { id: 'p1-2', t: 'Data basics', d: 'NumPy and pandas in Jupyter: load, clean, filter and join a dataset.', w: 'days 7–9' },
+      { id: 'p1-3', t: 'How models work', d: 'Tokens, embeddings, context windows, temperature, hallucination; fine-tuning vs prompting vs retrieval.', w: 'days 10–15' },
+      { id: 'p1-4', t: 'First LLM API call', d: 'From Python and from Next.js: stream a response, return structured JSON, count tokens and cost.', w: 'days 16–18' }
+    ] }],
+    boss: { id: 'boss-1', t: 'The first service', d: 'A FastAPI service on GitHub calls an LLM and returns structured output, and you can explain embeddings without notes.' },
+    gear: ['Python tutorial and FastAPI docs', 'Hugging Face LLM course', 'Chip Huyen, AI Engineering (2025)'] },
+  { n: 2, id: 'level-2', zone: 'Embedding Woods', name: 'LLM skills', start: '2026-11-23', end: '2026-12-27', roof: 0x2F8A6A,
+    mission: 'Master the four skills most AI engineer job posts ask for, each as a small working example.',
+    groups: [{ quests: [
+      { id: 'p2-1', t: 'Prompting and structured output', d: 'System prompts, few-shot examples, JSON schemas, Pydantic or Zod validation.', w: 'week 1' },
+      { id: 'p2-2', t: 'Retrieval-augmented generation (RAG)', d: 'Chunk, embed, store in pgvector, retrieve, answer with citations. Then hybrid search and reranking.', w: 'weeks 2–3' },
+      { id: 'p2-3', t: 'Tool use and agents', d: 'Let the model call your functions. A hand-built loop first, then one framework to compare.', w: 'week 4' },
+      { id: 'p2-4', t: 'Evaluation', d: 'A 30 to 50 question test set, scored automatically and tracked as you change things.', w: 'week 5' },
+      { id: 'p2-5', t: 'ML fundamentals', d: 'Karpathy’s free Neural Networks: Zero to Hero, 3 to 4 sessions a week.', w: 'ongoing' }
+    ] }],
+    boss: { id: 'boss-2', t: 'Four repos', d: 'Structured output, RAG, agent and eval harness repos, each with a README and one measured result.' },
+    gear: ['Your edge: put each one behind a Next.js interface. Most candidates ship notebooks; you ship products.'] },
+  { n: 3, id: 'level-3', zone: 'Portfolio Peaks', name: 'Portfolio', start: '2026-12-28', end: '2027-01-31', roof: 0x7D82B8,
+    mission: 'Three finished, deployed projects tied to your fintech and banking background, and a profile that shows them.',
+    groups: [
+      { label: 'Projects', quests: [
+        { id: 'p3-1', t: 'Regulation assistant (flagship)', d: 'Answers questions over banking regulations with cited sources, in English, French or Arabic.', w: '2 weeks' },
+        { id: 'p3-2', t: 'Invoice agent', d: 'Reads invoices, extracts and checks fields, saves them to a database.', w: '1.5 weeks' },
+        { id: 'p3-3', t: 'Transaction categorizer', d: 'A small fine-tuned model vs prompting a large one, on accuracy, cost and speed.', w: '1.5 weeks' }
+      ] },
+      { label: 'Side quests', quests: [
+        { id: 'p3-4', t: 'Propose an AI feature at SLASH Tech', d: 'A chatbot, smart search or summaries. AI shipped at work beats any side project.' },
+        { id: 'p3-5', t: 'Publish your best Master’s coursework', d: 'A public repo with a clean README.' },
+        { id: 'pr-6', t: 'New LinkedIn headline', d: 'Full Stack Developer → AI Engineer | LLM apps, RAG & agents | Next.js · Node.js · Python | MSc AI @ UrFU' },
+        { id: 'pr-7', t: 'Rewrite About around the transition', d: '3 years shipping production apps, now building AI products.' },
+        { id: 'pr-8', t: 'Add your projects to Featured', d: 'Each with a live demo and GitHub link.' },
+        { id: 'pr-9', t: 'Post about each project', d: 'What you built, what failed, what you measured. Every two weeks.' }
+      ] }
+    ],
+    boss: { id: 'boss-3', t: 'Ship it', d: 'All three projects have a live demo, a README with a diagram, real eval numbers and a LinkedIn post with a short recording.' },
+    gear: [] },
+  { n: 4, id: 'level-4', zone: 'Production Foundry', name: 'Production', start: '2027-02-01', end: '2027-02-21', roof: 0xB8583E,
+    mission: 'Prove you can run AI in production, not just demo it. Apply each quest to your flagship project.',
+    groups: [{ quests: [
+      { id: 'p4-1', t: 'Containers and deployment', d: 'Package the API with Docker and deploy it on AWS.' },
+      { id: 'p4-2', t: 'Observability', d: 'Log every model call: prompt, response, latency, cost.' },
+      { id: 'p4-3', t: 'Cost and speed', d: 'Caching and smaller models where quality allows, measured against your evals.' },
+      { id: 'p4-4', t: 'Safety and reliability', d: 'Errors, timeouts, rate limits, and prompt injection in uploaded documents.' },
+      { id: 'p4-5', t: 'One merged open-source pull request', d: 'A fix or docs improvement in a RAG or agent library you used.' }
+    ] }],
+    boss: { id: 'boss-4', t: 'Production metrics', d: 'Your flagship README shows cost per query, average latency and how failures are handled.' },
+    gear: [] },
+  { n: 5, id: 'level-5', zone: 'Hiring Castle', name: 'Job search', start: '2027-02-22', end: null, roof: 0xE06B5E,
+    mission: 'Apply where full stack plus AI wins: AI startups and fintech companies adding AI.',
+    groups: [{ quests: [
+      { id: 'p5-1', t: 'Headline: AI Engineer, plus an AI-first CV', d: 'Lead with your three projects.' },
+      { id: 'p5-2', t: 'List the MSc as “expected June 2027”', d: 'You can apply while still enrolled.' },
+      { id: 'p5-3', t: 'Target the right titles', d: 'AI Engineer, LLM Engineer, AI Product Engineer, Full Stack Engineer (AI).' },
+      { id: 'p5-4', t: 'Rehearse the flagship walkthrough', d: 'Architecture, why each part, how you measured quality, what failed.' }
+    ] }],
+    boss: { id: 'boss-5', t: 'The interview', d: 'Walk an interviewer through your flagship project end to end, without notes. Then sign the offer.' },
+    gear: [] }
+];
+const WORDS = [
+  { t: 'headline', at: 0.07, side: 1, d: 'The line under your name on LinkedIn. Recruiters search it, so it should name the role you want and its key skills.' },
+  { t: 'Python', at: 0.2, side: -1, d: 'The main language of AI work: model APIs, data tools and ML libraries all speak it first.' },
+  { t: 'tokens', at: 0.3, side: 1, d: 'Models read text in chunks called tokens, roughly three quarters of an English word each. Context limits and prices are counted in tokens.' },
+  { t: 'embeddings', at: 0.41, side: -1, d: 'A list of numbers that places a piece of text on a map of meaning. Texts with similar meanings land close together, which is how search by meaning works.' },
+  { t: 'RAG', at: 0.5, side: 1, d: 'Retrieval-augmented generation: find the relevant documents first, then hand them to the model so it answers from your data, with sources.' },
+  { t: 'agents', at: 0.58, side: -1, d: 'A model that can call tools, like search, a database or an API, in a loop until a task is done.' },
+  { t: 'evals', at: 0.66, side: 1, d: 'Tests for AI output: a set of questions with expected answers, scored automatically, so you know whether a change helped or hurt.' },
+  { t: 'fine-tuning', at: 0.74, side: -1, d: 'Training a model further on your own examples to specialise it. Prompting or RAG is often cheaper, so try those first and compare.' },
+  { t: 'latency', at: 0.84, side: 1, d: 'How long a response takes. In production you track it beside cost per request and error rate.' },
+  { t: 'offer', at: 0.95, side: -1, d: 'The end of the road. Walk in with three shipped projects, real numbers and a story you can tell without notes.' }
+];
+const QXP = 100, BXP = 300;
+const RANKS = [[0, 'Full Stack Dev'], [600, 'Python Initiate'], [1400, 'Prompt Crafter'], [2400, 'RAG Builder'], [3400, 'AI Builder'], [4400, 'Production Pro'], [5000, 'AI Engineer']];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const pad = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+const fmt = s => `${MONTHS[Number(s.slice(5, 7)) - 1]} ${Number(s.slice(8))}`;
+const questsOf = L => L.groups.flatMap(g => g.quests);
+const $ = id => document.getElementById(id);
+
+const state = { done: {}, sel: null, calm: false };
+const KEY = 'ai-roadmap-progress-v1', POS_KEY = 'ai-roadmap-position-v1';
+try { const raw = localStorage.getItem(KEY); if (raw) state.done = JSON.parse(raw).done || {}; } catch (e) {}
+try { state.calm = localStorage.getItem('ai-roadmap-calm') === '1' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) {}
+
+const questsDone = L => questsOf(L).every(q => state.done[q.id]);
+const cleared = L => questsDone(L) && !!state.done[L.boss.id];
+const unlocked = L => L.n === 0 || cleared(LEVELS[L.n - 1]);
+const currentLevel = () => LEVELS.find(L => !cleared(L)) || null;
+function xp() { let x = 0; for (const L of LEVELS) { x += questsOf(L).filter(q => state.done[q.id]).length * QXP; if (state.done[L.boss.id]) x += BXP; } return x; }
+const rankFor = x => { let r = RANKS[0]; for (const k of RANKS) if (x >= k[0]) r = k; return r; };
+
+/* ================= HUD ================= */
+function renderHud() {
+  const x = xp(), r = rankFor(x), next = RANKS.at(RANKS.indexOf(r) + 1);
+  $('rank').textContent = r[1];
+  $('xpfill').style.width = (next ? (x - r[0]) / (next[0] - r[0]) * 100 : 100) + '%';
+  $('xptext').textContent = `${x.toLocaleString()} / 5,000 XP${next ? ` · ${(next[0] - x).toLocaleString()} to ${next[1]}` : ''}`;
+  const cur = currentLevel(), t = today();
+  $('now').textContent = cur ? `Now: ${cur.zone}${cur.end ? (t > cur.end ? ' · past target, keep moving' : ` · by ${fmt(cur.end)}`) : ''}` : 'Every house is lit. You made it.';
+}
+
+/* ================= Sheets ================= */
+const tick = '<svg viewBox="0 0 16 16" fill="none" stroke="#10241F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+let sheetEl = null, sheetKind = null;
+function openSheet(kind, html) {
+  closeSheet(true);
+  sheetKind = kind;
+  sheetEl = document.createElement('div'); sheetEl.className = 'sheet-wrap';
+  sheetEl.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+  document.body.appendChild(sheetEl);
+  sheetEl.addEventListener('click', onSheetClick);
+  sheetEl.addEventListener('change', onSheetChange);
+  const x = sheetEl.querySelector('.x'); if (x) x.focus();
+}
+function closeSheet(silent) { if (sheetEl) { sheetEl.remove(); sheetEl = null; sheetKind = null; } }
+function questHtml(q, extra = '', sealed = false, xpv = QXP) {
+  const done = !!state.done[q.id];
+  return `<li><label class="quest${extra}${done ? ' is-done' : ''}${sealed ? ' sealed' : ''}"><input type="checkbox" data-q="${q.id}"${done ? ' checked' : ''}${sealed ? ' disabled' : ''}><span class="box">${tick}</span><span><span class="t">${q.t}</span><p class="d">${q.d}</p>${q.w ? `<span class="when">${q.w}</span>` : ''}</span><span class="xp">${sealed ? 'sealed' : `+${xpv} XP`}</span></label></li>`;
+}
+function levelHtml(L) {
+  const t = today(), qs = questsOf(L), n = qs.filter(q => state.done[q.id]).length, open = unlocked(L), isClear = cleared(L);
+  const dates = L.end ? `${fmt(L.start)} – ${fmt(L.end)}` : `from ${fmt(L.start)}`;
+  let pills = isClear ? '<span class="pill good">Cleared ★★★</span>' : open ? '<span class="pill gold">Lights on</span>' : '<span class="pill">Locked</span>';
+  if (open && !isClear && L.end && t > L.end) pills += '<span class="pill late">Past target date</span>';
+  pills += `<span class="pill">Target ${dates}</span><span class="pill">${n} / ${qs.length} quests</span>`;
+  const head = `<div class="sheet-top"><div><span class="eyebrow">House ${L.n} · ${L.zone}</span><h2>${L.name}</h2></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="pills">${pills}</div><p class="mission"><b>Mission:</b> ${L.mission}</p>`;
+  if (!open) {
+    const prev = LEVELS[L.n - 1], cur = currentLevel();
+    return head + `<div class="locked-msg"><p>The door is boarded up and the windows are dark. Clear <b style="color:var(--ink)">${prev.zone}</b>, including its boss, to light this house.</p>${cur ? `<button class="btn" type="button" data-go="${cur.id}">Walk to ${cur.zone}</button>` : ''}</div>`;
+  }
+  const sealed = !questsDone(L);
+  const groups = L.groups.map(g => `<div><span class="group-label">${g.label || 'Quests'}</span><ul class="qlist">${g.quests.map(q => questHtml(q)).join('')}</ul></div>`).join('');
+  const boss = `<div><span class="group-label">${sealed ? 'Boss · finish every quest to face it' : 'Boss fight'}</span><ul class="qlist">${questHtml(L.boss, ' boss', sealed && !state.done[L.boss.id], BXP)}</ul></div>`;
+  const cards = `<div class="cards">
+    <div class="card"><h3>Your 5-hour day</h3><ul><li>1.5 h learn one concept</li><li>3 h build with it the same day</li><li>0.5 h commit, README, notes</li><li>Day 7: full rest</li></ul></div>
+    ${L.gear.length ? `<div class="card"><h3>Gear for this house</h3><ul>${L.gear.map(g => `<li>${g}</li>`).join('')}</ul></div>` : `<div class="card"><h3>End-of-week check</h3><ol><li>On track for the boss? If not, cut scope.</li><li>Finished work public on GitHub?</li><li>Posted in the last two weeks?</li></ol></div>`}
+  </div>`;
+  return head + groups + boss + cards;
+}
+function levelsHtml() {
+  const cur = currentLevel();
+  return `<div class="sheet-top"><div><span class="eyebrow">Roadmap</span><h2>Six houses</h2></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <p class="small">Each house is one phase. Clear its quests and its boss to light the next one.</p>
+    <ul class="levels">${LEVELS.map(L => {
+      const qs = questsOf(L), n = qs.filter(q => state.done[q.id]).length, isClear = cleared(L), open = unlocked(L), isCur = cur && cur.n === L.n;
+      const st = isClear ? 'Cleared' : open ? `${n} of ${qs.length} quests · ${L.end ? 'by ' + fmt(L.end) : 'from ' + fmt(L.start)}` : `Locked · ${L.end ? fmt(L.start) + ' – ' + fmt(L.end) : 'from ' + fmt(L.start)}`;
+      return `<li><button class="lv${isClear ? ' clear' : ''}${isCur ? ' cur' : ''}${open ? '' : ' lock'}" type="button" data-level="${L.id}"><span class="num">${isClear ? '★' : L.n}</span><span><span class="nm">${L.zone}</span><br><span class="st">${L.name} · ${st}</span></span><span class="small">${open ? (world ? 'Go →' : 'Open →') : '🔒'}</span></button></li>`;
+    }).join('')}</ul><p class="small" id="saveState">${saveText}</p>`;
+}
+function helpHtml() {
+  return `<div class="sheet-top"><div><span class="eyebrow">Help</span><h2>Find your way</h2></div><button class="x" type="button" data-close aria-label="Close">×</button></div>
+    <div class="help">
+      <div><h3>On a computer</h3><ul><li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys to walk, <kbd>Shift</kbd> to run</li><li>Drag to look around</li><li><kbd>E</kbd> to enter the house in front of you</li><li>Click a house to walk there, click a glowing word to read it</li></ul></div>
+      <div><h3>On a phone</h3><ul><li>The round pad bottom left walks</li><li>Swipe anywhere else to look</li><li>Tap a house to walk there, tap a glowing word to read it</li></ul></div>
+      <div><h3>The rules</h3><ul><li>Each house is a level with quests (+100 XP) and a boss (+300 XP)</li><li>The boss wakes up once every quest is done</li><li>Beating the boss lights the next house</li><li>Calm mode stops the ambient motion and makes travel instant</li></ul></div>
+    </div>`;
+}
+function openLevel(id) { state.sel = id; openSheet('level', levelHtml(LEVELS.find(l => l.id === id))); }
+function refreshSheet() {
+  if (!sheetEl) return;
+  const sh = sheetEl.querySelector('.sheet'), top = sh.scrollTop;
+  if (sheetKind === 'level') sh.innerHTML = levelHtml(LEVELS.find(l => l.id === state.sel));
+  else if (sheetKind === 'levels') sh.innerHTML = levelsHtml();
+  sh.scrollTop = top;
+}
+function onSheetClick(e) {
+  if (e.target === sheetEl || e.target.closest('[data-close]')) { closeSheet(); return; }
+  const go = e.target.closest('[data-go]'); if (go) { closeSheet(); travelTo(go.dataset.go); return; }
+  const lv = e.target.closest('[data-level]');
+  if (lv) { const L = LEVELS.find(l => l.id === lv.dataset.level); closeSheet(); if (world && unlocked(L)) travelTo(L.id); else openLevel(L.id); }
+}
+function onSheetChange(e) {
+  const id = e.target.dataset && e.target.dataset.q; if (!id) return;
+  const L = LEVELS.find(l => l.id === state.sel);
+  const before = xp(), rb = rankFor(before), wasClear = cleared(L), allBefore = questsDone(L);
+  if (e.target.checked) state.done[id] = today(); else delete state.done[id];
+  const after = xp();
+  if (after > before) floatXp(e.target, `+${after - before} XP`);
+  persist(); renderHud(); refreshSheet(); if (world) world.refresh();
+  if (!wasClear && cleared(L)) celebrate(L);
+  else if (!allBefore && questsDone(L) && !state.done[L.boss.id]) toast('Every quest done. The boss is awake.');
+  else if (rankFor(after)[0] > rb[0]) toast(`Rank up: ${rankFor(after)[1]}`);
+}
+function floatXp(input, text) {
+  if (state.calm) return;
+  const card = input.closest('.quest'); if (!card) return;
+  const r = card.getBoundingClientRect(), f = document.createElement('div');
+  f.className = 'float'; f.textContent = text;
+  f.style.left = Math.min(window.innerWidth - 110, r.right - 100) + 'px'; f.style.top = (r.top + 4) + 'px';
+  document.body.appendChild(f); setTimeout(() => f.remove(), 1000);
+}
+let toastTimer;
+function toast(text) { const t = $('toast'); t.textContent = text; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600); }
+function celebrate(L) {
+  const next = LEVELS[L.n + 1];
+  $('toast').classList.remove('show');
+  const wrap = document.createElement('div'); wrap.className = 'celebrate';
+  wrap.innerHTML = `<canvas></canvas><div class="cele-card" role="dialog" aria-label="House cleared"><div class="stars">★★★</div><div class="big">${L.zone} cleared</div>
+    <p>+${BXP} XP for the boss.</p><p class="small">${next ? `A light just came on in <b style="color:var(--ink)">${next.zone}</b>.` : '<b style="color:var(--ink)">You are an AI Engineer.</b> Go sign that offer.'}</p>
+    <div class="row">${next ? `<button class="btn" type="button" data-next="${next.id}">Walk to ${next.zone}</button>` : ''}<button class="btn ghost" type="button" data-close>Stay here</button></div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e => {
+    const n = e.target.closest('[data-next]');
+    if (n) { wrap.remove(); closeSheet(); travelTo(n.dataset.next); }
+    else if (e.target.closest('[data-close]') || e.target === wrap) wrap.remove();
+  });
+  const b = wrap.querySelector('.btn'); if (b) b.focus();
+  if (state.calm) return;
+  const cv = wrap.querySelector('canvas'), ctx = cv.getContext('2d'), W = cv.width = innerWidth, H = cv.height = innerHeight;
+  const cols = ['#FFC872', '#7FE0A8', '#FF7A66', '#9FD3FF', '#F6F1E4'];
+  const bits = Array.from({ length: 150 }, () => ({ x: W / 2, y: H / 2, vx: (Math.random() - .5) * 14, vy: Math.random() * -14 - 4, s: 4 + Math.random() * 6, c: cols[Math.floor(Math.random() * 5)], r: Math.random() * 6 }));
+  let f = 0;
+  (function step() { if (!wrap.isConnected || f++ > 160) return; ctx.clearRect(0, 0, W, H);
+    for (const p of bits) { p.vy += .35; p.x += p.vx; p.y += p.vy; p.r += .2; ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s * .6); ctx.restore(); }
+    requestAnimationFrame(step); })();
+}
+
+/* ================= 3D world ================= */
+let world = null;
+function travelTo(id) { if (world) world.travelTo(id); else openLevel(id); }
+
+function buildWorld() {
+  const T = window.THREE;
+  const canvas = $('world');
+  let renderer;
+  try { renderer = new T.WebGLRenderer({ canvas, antialias: true }); } catch (e) { return null; }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputEncoding = T.sRGBEncoding;
+  const scene = new T.Scene();
+  const FOG = 0x1C3A33;
+  scene.background = new T.Color(FOG);
+  scene.fog = new T.Fog(FOG, 16, 72);
+  const camera = new T.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 400);
+  camera.rotation.order = 'YXZ';
+
+  // seeded random so the forest is the same every visit
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+
+  // sky
+  const sky = new T.Mesh(new T.SphereGeometry(220, 24, 16), new T.ShaderMaterial({
+    side: T.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new T.Color(0x0E1F33) }, mid: { value: new T.Color(0x2A5148) }, bottom: { value: new T.Color(0xE7A86E) } },
+    vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 bottom; varying float h; void main(){ vec3 c = h > 0.12 ? mix(mid, top, smoothstep(0.12, 0.7, h)) : mix(bottom, mid, smoothstep(-0.05, 0.12, h)); gl_FragColor = vec4(c, 1.0); }'
+  }));
+  scene.add(sky);
+
+  scene.add(new T.HemisphereLight(0xBFD8FF, 0x1A2E22, 0.62));
+  const moonLight = new T.DirectionalLight(0xFFE2B8, 0.55); moonLight.position.set(-30, 40, -20); scene.add(moonLight);
+
+  // canvas textures
+  const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    r.addColorStop(0, 'rgba(255,230,170,1)'); r.addColorStop(.25, 'rgba(255,200,114,.6)'); r.addColorStop(1, 'rgba(255,200,114,0)'); g.fillStyle = r; g.fillRect(0, 0, 128, 128); return new T.CanvasTexture(c); })();
+  const glowSprite = (s, op = 1, col = 0xFFFFFF) => { const m = new T.Sprite(new T.SpriteMaterial({ map: glowTex, color: col, blending: T.AdditiveBlending, depthWrite: false, transparent: true, opacity: op })); m.scale.set(s, s, 1); return m; };
+  function rrect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  function labelTexture(lines) {
+    const c = document.createElement('canvas'), g = c.getContext('2d'), padX = 34, lh = [36, 54, 34];
+    const fonts = ['700 26px "Nunito Sans", sans-serif', '44px "Young Serif", Georgia, serif', '600 26px "Nunito Sans", sans-serif'];
+    let w = 0; lines.forEach((l, i) => { if (!l) return; g.font = fonts[i]; w = Math.max(w, g.measureText(l.text).width); });
+    c.width = Math.ceil(w + padX * 2); c.height = 20 + lines.reduce((a, l, i) => a + (l ? lh[i] : 0), 0) + 14;
+    rrect(g, 2, 2, c.width - 4, c.height - 4, 22); g.fillStyle = 'rgba(10,26,22,.82)'; g.fill(); g.strokeStyle = 'rgba(246,241,228,.22)'; g.lineWidth = 2; g.stroke();
+    let y = 20; g.textAlign = 'center'; g.textBaseline = 'top';
+    lines.forEach((l, i) => { if (!l) return; g.font = fonts[i]; g.fillStyle = l.color; g.fillText(l.text, c.width / 2, y); y += lh[i]; });
+    const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = 4; return { t, a: c.width / c.height };
+  }
+  function wordTexture(text) {
+    const c = document.createElement('canvas'), g = c.getContext('2d'); g.font = '64px "Young Serif", Georgia, serif';
+    const w = g.measureText(text).width; c.width = Math.ceil(w + 80); c.height = 120;
+    g.font = '64px "Young Serif", Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = 'rgba(255,200,114,1)'; g.shadowBlur = 28; g.fillStyle = '#FFE3A8'; g.fillText(text, c.width / 2, 62); g.shadowBlur = 10; g.fillText(text, c.width / 2, 62);
+    const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; return { t, a: c.width / c.height };
+  }
+  const iconTex = (draw) => { const c = document.createElement('canvas'); c.width = c.height = 128; draw(c.getContext('2d')); const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; return t; };
+  const lockTex = iconTex(g => { g.fillStyle = 'rgba(10,26,22,.85)'; g.beginPath(); g.arc(64, 64, 60, 0, 7); g.fill(); g.strokeStyle = '#A9BFB5'; g.lineWidth = 10; g.beginPath(); g.arc(64, 54, 20, Math.PI, 0); g.stroke(); g.fillStyle = '#A9BFB5'; rrect(g, 36, 54, 56, 42, 8); g.fill(); g.fillStyle = 'rgba(10,26,22,1)'; g.fillRect(60, 66, 8, 16); });
+  const starTex = iconTex(g => { g.shadowColor = '#FFC872'; g.shadowBlur = 20; g.fillStyle = '#FFC872'; g.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? 22 : 52, a = -Math.PI / 2 + i * Math.PI / 5; g.lineTo(64 + r * Math.cos(a), 64 + r * Math.sin(a)); } g.closePath(); g.fill(); });
+
+  // ground
+  const ground = new T.Mesh(new T.CircleGeometry(90, 64), new T.MeshLambertMaterial({ color: 0x0E281C }));
+  ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+  // path
+  const curve = new T.CatmullRomCurve3([[0, 20], [-2.5, 12], [1.5, 4], [-2, -4], [2.5, -12], [-2, -20], [2, -28], [0, -36]].map(p => new T.Vector3(p[0], 0, p[1])));
+  const samples = curve.getSpacedPoints(240);
+  const STONES = 520, stoneGeo = new T.CylinderGeometry(0.42, 0.48, 0.08, 7), stoneMat = new T.MeshLambertMaterial({ color: 0xFFFFFF });
+  const stones = new T.InstancedMesh(stoneGeo, stoneMat, STONES); const m4 = new T.Matrix4(), q = new T.Quaternion(), sc = new T.Vector3(), col = new T.Color();
+  for (let i = 0; i < STONES; i++) {
+    const p = curve.getPointAt(i / STONES), tg = curve.getTangentAt(i / STONES), side = new T.Vector3(-tg.z, 0, tg.x).multiplyScalar((rnd() - .5) * 1.8);
+    q.setFromAxisAngle(new T.Vector3(0, 1, 0), rnd() * 6); const s = .7 + rnd() * .6; sc.set(s, 1, s * (.7 + rnd() * .4));
+    m4.compose(new T.Vector3(p.x + side.x, 0.03, p.z + side.z), q, sc); stones.setMatrixAt(i, m4);
+    col.setHSL(.09, .16, .34 + rnd() * .12); stones.setColorAt(i, col);
+  }
+  scene.add(stones);
+  const distToPath = (x, z) => { let d = 1e9; for (const s of samples) d = Math.min(d, (s.x - x) ** 2 + (s.z - z) ** 2); return Math.sqrt(d); };
+
+  // houses
+  const HPOS = [[-7.5, 11], [7, 3.5], [-7.5, -5], [8, -12.5], [-7.5, -20.5], [0, -44]];
+  const houses = [], hitTargets = [];
+  const wallMat = new T.MeshLambertMaterial({ color: 0xEADCC0 }), woodMat = new T.MeshLambertMaterial({ color: 0x6B4A2B }), stoneMat2 = new T.MeshLambertMaterial({ color: 0x8E8478 });
+  LEVELS.forEach((L, i) => {
+    const g = new T.Group(); const [hx, hz] = HPOS[i]; g.position.set(hx, 0, hz);
+    const castle = i === 5, W = castle ? 7 : 3.4, H = castle ? 4.2 : 2.5, D = castle ? 5 : 3.2;
+    const roofMat = new T.MeshLambertMaterial({ color: L.roof });
+    const winMat = new T.MeshStandardMaterial({ color: 0x2A2F2C, emissive: 0xFFB45C, emissiveIntensity: 0 });
+    const body = new T.Mesh(new T.BoxGeometry(W, H, D), castle ? new T.MeshLambertMaterial({ color: 0x8C6CC9 }) : wallMat); body.position.y = H / 2; g.add(body);
+    if (castle) {
+      [-1, 1].forEach(s => { const tw = new T.Mesh(new T.CylinderGeometry(1.1, 1.2, 6.5, 10), new T.MeshLambertMaterial({ color: 0x7A58B8 })); tw.position.set(s * (W / 2 + .3), 3.25, D / 2 - .6); g.add(tw);
+        const cone = new T.Mesh(new T.ConeGeometry(1.45, 2.4, 10), roofMat); cone.position.set(s * (W / 2 + .3), 7.7, D / 2 - .6); g.add(cone); });
+      const flagPole = new T.Mesh(new T.CylinderGeometry(.05, .05, 2.2, 6), woodMat); flagPole.position.set(0, H + 1.1, 0); g.add(flagPole);
+      const flag = new T.Mesh(new T.PlaneGeometry(1.2, .7), new T.MeshLambertMaterial({ color: 0xFFC872, side: T.DoubleSide })); flag.position.set(.6, H + 1.8, 0); g.add(flag); g.userData.flag = flag;
+      const crenel = new T.Mesh(new T.BoxGeometry(W, .5, D), new T.MeshLambertMaterial({ color: 0x7A58B8 })); crenel.position.y = H + .25; g.add(crenel);
+    } else {
+      const roof = new T.Mesh(new T.ConeGeometry(W * .82, 1.9, 4), roofMat); roof.rotation.y = Math.PI / 4; roof.position.y = H + .95; roof.scale.z = D / W; g.add(roof);
+      const chim = new T.Mesh(new T.BoxGeometry(.45, 1.2, .45), stoneMat2); chim.position.set(W * .25, H + 1.2, -D * .15); g.add(chim);
+    }
+    const door = new T.Mesh(new T.BoxGeometry(castle ? 1.4 : .9, castle ? 2.2 : 1.5, .12), woodMat); door.position.set(0, (castle ? 2.2 : 1.5) / 2, D / 2 + .05); g.add(door);
+    [-1, 1].forEach(s => { const w = new T.Mesh(new T.BoxGeometry(.6, .6, .1), winMat); w.position.set(s * W * .3, H * .6, D / 2 + .05); g.add(w); });
+    const boards = new T.Group();
+    [[.5, .35], [-.5, -.35]].forEach(([r, y]) => { const b = new T.Mesh(new T.BoxGeometry(castle ? 1.8 : 1.25, .16, .08), new T.MeshLambertMaterial({ color: 0x8A6A44 })); b.rotation.z = r; b.position.set(0, (castle ? 1.1 : .75) + y * .4, D / 2 + .14); boards.add(b); });
+    g.add(boards);
+    const lock = new T.Sprite(new T.SpriteMaterial({ map: lockTex, depthWrite: false, transparent: true })); lock.scale.set(.8, .8, 1); lock.position.set(0, (castle ? 2.6 : 1.85), D / 2 + .5); g.add(lock);
+    const lanternPost = new T.Mesh(new T.CylinderGeometry(.06, .07, 1.8, 6), woodMat); lanternPost.position.set(W / 2 + .5, .9, D / 2 + .6); g.add(lanternPost);
+    const lantern = new T.Mesh(new T.SphereGeometry(.17, 10, 8), new T.MeshBasicMaterial({ color: 0x3A3A33 })); lantern.position.set(W / 2 + .5, 1.9, D / 2 + .6); g.add(lantern);
+    const lanternGlow = glowSprite(2.2, .9); lanternGlow.position.copy(lantern.position); g.add(lanternGlow);
+    const star = new T.Sprite(new T.SpriteMaterial({ map: starTex, depthWrite: false, transparent: true })); star.scale.set(1.3, 1.3, 1); star.position.set(0, castle ? 10 : H + 2.6, 0); g.add(star);
+    const beam = new T.Mesh(new T.CylinderGeometry(.5, .9, 26, 16, 1, true), new T.MeshBasicMaterial({ color: 0xFFC872, transparent: true, opacity: .16, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide }));
+    beam.position.set(0, 13, D / 2 + 1.3); g.add(beam);
+    const label = new T.Sprite(new T.SpriteMaterial({ depthWrite: false, transparent: true, fog: false })); label.position.set(0, castle ? 12 : H + 4.3, 0); g.add(label);
+    const hit = new T.Mesh(new T.BoxGeometry(W + 1, castle ? 9 : H + 2.5, D + 1), new T.MeshBasicMaterial({ visible: false })); hit.position.y = (castle ? 9 : H + 2.5) / 2; hit.userData.levelId = L.id; g.add(hit); hitTargets.push(hit);
+    // face the nearest point on the path
+    let best = samples[0], bd = 1e9; for (const s of samples) { const d = (s.x - hx) ** 2 + (s.z - hz) ** 2; if (d < bd) { bd = d; best = s; } }
+    if (castle) best = samples.at(-1);
+    g.lookAt(best.x, 0, best.z);
+    scene.add(g);
+    g.updateMatrixWorld(true);
+    const doorPos = g.localToWorld(new T.Vector3(0, 0, D / 2 + .2)), approach = g.localToWorld(new T.Vector3(0, 0, D / 2 + (castle ? 4 : 3)));
+    houses.push({ L, g, winMat, boards, lock, lantern, lanternGlow, star, beam, label, door: doorPos, approach, radius: Math.max(W, D) * .62 + (castle ? 1.2 : .3), labelKey: '' });
+  });
+
+  // trees and flowers
+  const TREES = 230, trunkMesh = new T.InstancedMesh(new T.CylinderGeometry(.12, .2, 1.4, 6), woodMat, TREES);
+  const leafA = new T.InstancedMesh(new T.ConeGeometry(1, 2, 7), new T.MeshLambertMaterial({ color: 0xFFFFFF }), TREES);
+  const leafB = new T.InstancedMesh(new T.ConeGeometry(.75, 1.6, 7), new T.MeshLambertMaterial({ color: 0xFFFFFF }), TREES);
+  const treeSpots = [];
+  let placed = 0, guard = 0;
+  while (placed < TREES && guard++ < 6000) {
+    const a = rnd() * Math.PI * 2, r = 4 + rnd() * 60, x = Math.cos(a) * r * .85, z = Math.sin(a) * r - 10;
+    if (distToPath(x, z) < 4.2) continue;
+    if (houses.some(h => (h.g.position.x - x) ** 2 + (h.g.position.z - z) ** 2 < (h.radius + 2.6) ** 2)) continue;
+    if (x * x + (z - 22) ** 2 < 49) continue;
+    const s = .8 + rnd() * 1.1; q.identity();
+    m4.compose(new T.Vector3(x, .7 * s, z), q, sc.set(s, s, s)); trunkMesh.setMatrixAt(placed, m4);
+    m4.compose(new T.Vector3(x, (1.4 + 1) * s, z), q, sc.set(s * 1.1, s * 1.1, s * 1.1)); leafA.setMatrixAt(placed, m4);
+    m4.compose(new T.Vector3(x, (1.4 + 2.1) * s, z), q, sc.set(s, s, s)); leafB.setMatrixAt(placed, m4);
+    col.setHSL(.36 + rnd() * .08, .38, .2 + rnd() * .1); leafA.setColorAt(placed, col); col.offsetHSL(0, 0, .05); leafB.setColorAt(placed, col);
+    treeSpots.push([x, z, .45 * s]); placed++;
+  }
+  trunkMesh.count = leafA.count = leafB.count = placed; scene.add(trunkMesh, leafA, leafB);
+  const FLOW = 260, flowers = new T.InstancedMesh(new T.SphereGeometry(.07, 6, 4), new T.MeshBasicMaterial({ color: 0xFFFFFF }), FLOW);
+  for (let i = 0; i < FLOW; i++) { const a = rnd() * 6.28, r = 3 + rnd() * 40, x = Math.cos(a) * r * .8, z = Math.sin(a) * r - 8; m4.compose(new T.Vector3(x, .1, z), q.identity(), sc.set(1, 1, 1)); flowers.setMatrixAt(i, m4); col.set([0xFFD6E8, 0xFFF2B0, 0xC9E4FF, 0xFFC872][i % 4]); flowers.setColorAt(i, col); }
+  scene.add(flowers);
+
+  // fireflies
+  const FF = 220, ffGeo = new T.BufferGeometry(), ffPos = new Float32Array(FF * 3), ffBase = [];
+  for (let i = 0; i < FF; i++) { const x = (rnd() - .5) * 60, z = (rnd() - .5) * 80 - 10, y = .5 + rnd() * 4; ffPos.set([x, y, z], i * 3); ffBase.push([x, y, z, rnd() * 6]); }
+  ffGeo.setAttribute('position', new T.BufferAttribute(ffPos, 3));
+  const fireflies = new T.Points(ffGeo, new T.PointsMaterial({ map: glowTex, size: .55, color: 0xFFE7A8, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+  scene.add(fireflies);
+
+  // moon
+  const moon = glowSprite(40, .55, 0xFFF0D0); moon.position.set(-60, 55, -120); moon.material.fog = false; scene.add(moon);
+  const moonDisk = new T.Mesh(new T.CircleGeometry(5, 32), new T.MeshBasicMaterial({ color: 0xFFF3DA, fog: false })); moonDisk.position.copy(moon.position); moonDisk.lookAt(0, 0, 20); scene.add(moonDisk);
+
+  // glowing words
+  const words = WORDS.map(w => {
+    const p = curve.getPointAt(w.at), tg = curve.getTangentAt(w.at), side = new T.Vector3(-tg.z, 0, tg.x).multiplyScalar(2.1 * w.side);
+    const { t, a } = wordTexture(w.t);
+    const s = new T.Sprite(new T.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false })); const h = .62; s.scale.set(h * a, h, 1);
+    s.position.set(p.x + side.x, 2.1, p.z + side.z); s.userData.word = w; s.userData.baseY = 2.1; s.userData.phase = w.at * 20;
+    scene.add(s); hitTargets.push(s); return s;
+  });
+
+  const curLight = new T.PointLight(0xFFC27A, 1.4, 12, 2); scene.add(curLight);
+
+  function refresh() {
+    const cur = currentLevel();
+    houses.forEach(h => {
+      const open = unlocked(h.L), isClear = cleared(h.L), isCur = cur && cur.n === h.L.n;
+      h.winMat.emissiveIntensity = open ? 1.4 : 0;
+      h.boards.visible = !open; h.lock.visible = !open;
+      h.lantern.material.color.set(open ? 0xFFD48A : 0x3A3A33); h.lanternGlow.visible = open;
+      h.star.visible = isClear; h.beam.visible = !!isCur;
+      const qs = questsOf(h.L), n = qs.filter(x => state.done[x.id]).length;
+      const status = isClear ? '★ Cleared' : open ? `${n} of ${qs.length} quests${isCur ? ' · you are here' : ''}` : 'Locked';
+      const key = h.L.zone + status;
+      if (key !== h.labelKey) {
+        h.labelKey = key; const { t, a } = labelTexture([{ text: `HOUSE ${h.L.n} · ${h.L.name.toUpperCase()}`, color: '#FFC872' }, { text: h.L.zone, color: '#F6F1E4' }, { text: status, color: isClear ? '#7FE0A8' : open ? '#F6F1E4' : '#A9BFB5' }]);
+        if (h.label.material.map) h.label.material.map.dispose(); h.label.material.map = t; h.label.material.needsUpdate = true;
+        const hh = 1.55; h.label.scale.set(hh * a, hh, 1);
+      }
+      if (isCur) curLight.position.set(h.door.x, 2.4, h.door.z);
+    });
+    curLight.visible = !!cur;
+  }
+  refresh();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { houses.forEach(h => h.labelKey = ''); refresh(); words.forEach(s => { const { t, a } = wordTexture(s.userData.word.t); s.material.map.dispose(); s.material.map = t; s.material.needsUpdate = true; s.scale.set(.62 * a, .62, 1); }); });
+
+  // player
+  const P = { x: 0, z: 22.5, yaw: 0, pitch: -0.05 };
+  (function restorePosition() {
+    let s = null; try { s = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch (e) {}
+    if (s && isFinite(s.x) && isFinite(s.z) && Math.hypot(s.x, s.z + 10) < 60) { P.x = s.x; P.z = s.z; P.yaw = +s.yaw || 0; P.pitch = +s.pitch || -0.05; return; }
+    const cur = currentLevel();
+    if (cur && cur.n > 0) { const h = houses[cur.n]; P.x = h.approach.x; P.z = h.approach.z; P.yaw = Math.atan2(-(h.door.x - h.approach.x), -(h.door.z - h.approach.z)); P.pitch = .05; }
+  })();
+  let savedKey = '';
+  function savePosition() {
+    const k = [P.x, P.z, P.yaw, P.pitch].map(v => v.toFixed(2)).join(',');
+    if (k === savedKey) return; savedKey = k;
+    try { localStorage.setItem(POS_KEY, JSON.stringify({ x: +P.x.toFixed(2), z: +P.z.toFixed(2), yaw: +P.yaw.toFixed(3), pitch: +P.pitch.toFixed(3) })); } catch (e) {}
+  }
+  addEventListener('pagehide', savePosition);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) savePosition(); });
+  const keys = {}; let joy = { x: 0, y: 0 }; let auto = null; let active = false; let nearHouse = null;
+  addEventListener('keydown', e => {
+    if (!active || sheetEl || document.querySelector('.celebrate')) { if (e.key === 'Escape') { closeSheet(); $('word').hidden = true; } return; }
+    if (e.key === 'Escape') { $('word').hidden = true; return; }
+    if ((e.key === 'e' || e.key === 'E') && nearHouse) { openLevel(nearHouse.L.id); return; }
+    keys[e.code] = true; if (e.code.startsWith('Arrow')) e.preventDefault();
+  });
+  addEventListener('keyup', e => { keys[e.code] = false; });
+  addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+
+  let drag = null;
+  canvas.addEventListener('pointerdown', e => { if (!active) return; drag = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: 0 }; canvas.setPointerCapture(e.pointerId); canvas.classList.add('dragging'); });
+  canvas.addEventListener('pointermove', e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; drag.moved += Math.abs(dx) + Math.abs(dy);
+    const k = e.pointerType === 'touch' ? .006 : .0045; P.yaw -= dx * k; P.pitch = Math.max(-.7, Math.min(.45, P.pitch - dy * k)); auto = null;
+  });
+  const endDrag = e => {
+    if (!drag || drag.id !== e.pointerId) return;
+    const click = drag.moved < 8; drag = null; canvas.classList.remove('dragging');
+    if (click) pick(e.clientX, e.clientY);
+  };
+  canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', e => { drag = null; canvas.classList.remove('dragging'); });
+
+  const ray = new T.Raycaster(), ndc = new T.Vector2();
+  function pick(cx, cy) {
+    ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(hitTargets, false)[0]; if (!hit) return;
+    if (hit.object.userData.word) { const w = hit.object.userData.word; $('wordT').textContent = w.t; $('wordD').textContent = w.d; $('word').hidden = false; return; }
+    const L = LEVELS.find(l => l.id === hit.object.userData.levelId); if (L) travelTo(L.id);
+  }
+
+  // joystick
+  const joyEl = $('joy'), knob = $('knob'); let joyId = null;
+  const joyMove = e => { const r = joyEl.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2; let dx = e.clientX - cx, dy = e.clientY - cy; const m = Math.hypot(dx, dy), max = r.width / 2 - 10; if (m > max) { dx *= max / m; dy *= max / m; } knob.style.transform = `translate(${dx}px, ${dy}px)`; joy = { x: dx / max, y: dy / max }; auto = null; };
+  joyEl.addEventListener('pointerdown', e => { joyId = e.pointerId; joyEl.setPointerCapture(e.pointerId); joyMove(e); e.stopPropagation(); });
+  joyEl.addEventListener('pointermove', e => { if (e.pointerId === joyId) joyMove(e); });
+  const joyEnd = e => { if (e.pointerId !== joyId) return; joyId = null; joy = { x: 0, y: 0 }; knob.style.transform = ''; };
+  joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
+
+  function travelToHouse(id) {
+    const h = houses.find(x => x.L.id === id); if (!h) return;
+    $('word').hidden = true;
+    const yawTo = Math.atan2(-(h.door.x - h.approach.x), -(h.door.z - h.approach.z));
+    const dist = Math.hypot(h.approach.x - P.x, h.approach.z - P.z);
+    if (state.calm || dist < .5) { P.x = h.approach.x; P.z = h.approach.z; P.yaw = yawTo; P.pitch = .05; openLevel(id); return; }
+    let dy = yawTo - P.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    auto = { fx: P.x, fz: P.z, tx: h.approach.x, tz: h.approach.z, fy: P.yaw, dy, fp: P.pitch, t: 0, dur: Math.min(4.5, .8 + dist / 9), id };
+  }
+
+  function collide() {
+    for (const h of houses) { const dx = P.x - h.g.position.x, dz = P.z - h.g.position.z, d = Math.hypot(dx, dz), r = h.radius + .4; if (d < r && d > 0) { P.x = h.g.position.x + dx / d * r; P.z = h.g.position.z + dz / d * r; } }
+    for (const [tx, tz, tr] of treeSpots) { const dx = P.x - tx, dz = P.z - tz, d = Math.hypot(dx, dz), r = tr + .35; if (d < r && d > 0) { P.x = tx + dx / d * r; P.z = tz + dz / d * r; } }
+    const dx = P.x, dz = P.z + 10, d = Math.hypot(dx, dz); if (d > 58) { P.x = dx / d * 58; P.z = dz / d * 58 - 10; }
+  }
+
+  const clock = new T.Clock(); let tAll = 0; let lastNear = null; let lastSaveT = 0;
+  function frame() {
+    const dt = Math.min(clock.getDelta(), .05); tAll += dt;
+    const busy = !!sheetEl || !!document.querySelector('.celebrate');
+    if (active && !busy) {
+      if (auto) {
+        auto.t += dt / auto.dur; const k = auto.t >= 1 ? 1 : (1 - Math.cos(Math.PI * auto.t)) / 2;
+        P.x = auto.fx + (auto.tx - auto.fx) * k; P.z = auto.fz + (auto.tz - auto.fz) * k; P.yaw = auto.fy + auto.dy * k; P.pitch = auto.fp + (.05 - auto.fp) * k;
+        if (auto.t >= 1) { const id = auto.id; auto = null; openLevel(id); }
+      } else {
+        let f = 0, s = 0;
+        if (keys.KeyW || keys.ArrowUp) f += 1; if (keys.KeyS || keys.ArrowDown) f -= 1;
+        if (keys.KeyD) s += 1; if (keys.KeyA) s -= 1;
+        if (keys.ArrowLeft || keys.KeyQ) P.yaw += 1.8 * dt; if (keys.ArrowRight || keys.KeyR) P.yaw -= 1.8 * dt;
+        f -= joy.y; s += joy.x;
+        const m = Math.hypot(f, s);
+        if (m > .05) {
+          const sp = (keys.ShiftLeft || keys.ShiftRight ? 9 : 4.8) * Math.min(1, m) / Math.max(1, m);
+          P.x += (-Math.sin(P.yaw) * f + Math.cos(P.yaw) * s) * sp * dt; P.z += (-Math.cos(P.yaw) * f - Math.sin(P.yaw) * s) * sp * dt;
+          collide();
+        }
+      }
+    }
+    camera.position.set(P.x, 1.7, P.z); camera.rotation.set(P.pitch, P.yaw, 0);
+    if (active && tAll - lastSaveT > 1.5) { lastSaveT = tAll; savePosition(); }
+
+    // ambient motion
+    if (!state.calm) {
+      for (let i = 0; i < FF; i++) { const b = ffBase[i]; ffPos[i * 3] = b[0] + Math.sin(tAll * .4 + b[3]) * .8; ffPos[i * 3 + 1] = b[1] + Math.sin(tAll * .9 + b[3] * 2) * .4; ffPos[i * 3 + 2] = b[2] + Math.cos(tAll * .35 + b[3]) * .8; }
+      ffGeo.attributes.position.needsUpdate = true;
+      words.forEach(w => { w.position.y = w.userData.baseY + Math.sin(tAll * 1.2 + w.userData.phase) * .12; });
+      houses.forEach(h => { if (h.beam.visible) h.beam.material.opacity = .12 + Math.sin(tAll * 2) * .05; if (h.star.visible) h.star.material.rotation = Math.sin(tAll) * .2; if (h.g.userData.flag) h.g.userData.flag.rotation.y = Math.sin(tAll * 2.4) * .3; });
+      curLight.intensity = 1.3 + Math.sin(tAll * 3) * .15;
+    }
+
+    // proximity prompt
+    nearHouse = null;
+    if (active && !busy && !auto) for (const h of houses) { if (Math.hypot(P.x - h.door.x, P.z - h.door.z) < (h.L.n === 5 ? 5.2 : 3.8)) { nearHouse = h; break; } }
+    if (nearHouse !== lastNear) {
+      lastNear = nearHouse;
+      if (nearHouse) { const open = unlocked(nearHouse.L); $('promptWhat').innerHTML = `${open ? 'Door to' : 'Locked:'} <b>${nearHouse.L.zone}</b>`; $('enterBtn').firstChild.textContent = open ? 'Enter ' : 'Look ';
+        $('prompt').hidden = false; $('hint').hidden = true; }
+      else { $('prompt').hidden = true; $('hint').hidden = !active; }
+    }
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  $('enterBtn').addEventListener('click', () => { if (nearHouse) openLevel(nearHouse.L.id); });
+
+  addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+  frame();
+  return { refresh, travelTo: travelToHouse, start() { active = true; $('hint').hidden = false; } };
+}
+
+/* ================= Saving: this browser always, plus your private account storage when available ================= */
+let ref = null, writing = false, dirty = false, saveText = 'Progress is saved in this browser.';
+const setSave = t => { saveText = t; const el = document.getElementById('saveState'); if (el) el.textContent = t; };
+async function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify({ done: state.done })); } catch (e) {}
+  if (!ref) return;
+  if (writing) { dirty = true; return; }
+  writing = true;
+  try { do { dirty = false; await ref.set({ done: { ...state.done }, updatedAt: new Date().toISOString() }); } while (dirty); setSave('Progress is saved to your account.'); }
+  catch (e) { setSave('Progress is saved in this browser only.'); }
+  finally { writing = false; }
+}
+async function connect() {
+  if (!window.claude || !window.claude.use) return;
+  try {
+    const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+    const uid = user ? await user.id() : null;
+    if (!db || !uid) return;
+    ref = db.doc(`data/users/${uid}/progress`);
+    let first = true;
+    ref.onSnapshot(snap => {
+      if (snap.metadata.hasPendingWrites || writing) return;
+      const remote = snap.exists ? ((snap.data() || {}).done || {}) : {};
+      setSave('Progress is saved to your account.');
+      if (first && !Object.keys(remote).length && Object.keys(state.done).length) { first = false; persist(); return; }
+      first = false; state.done = { ...remote };
+      try { localStorage.setItem(KEY, JSON.stringify({ done: state.done })); } catch (e) {}
+      renderHud(); if (world) world.refresh(); refreshSheet();
+    }, () => setSave('Progress is saved in this browser only.'));
+  } catch (e) {}
+}
+
+/* ================= Boot ================= */
+function setCalm(v) { state.calm = v; $('bCalm').setAttribute('aria-pressed', String(v)); try { localStorage.setItem('ai-roadmap-calm', v ? '1' : '0'); } catch (e) {} }
+$('bLevels').addEventListener('click', () => openSheet('levels', levelsHtml()));
+$('bHelp').addEventListener('click', () => openSheet('help', helpHtml()));
+$('bCalm').addEventListener('click', () => setCalm(!state.calm));
+$('wordX').addEventListener('click', () => { $('word').hidden = true; });
+if (window.matchMedia && matchMedia('(pointer: coarse)').matches) { document.body.classList.add('touch'); $('hint').textContent = 'Pad to walk · swipe to look · tap a house'; }
+setCalm(state.calm);
+renderHud();
+
+function showHud() { $('hud').hidden = false; }
+$('listBtn').addEventListener('click', () => { $('title').classList.add('gone'); showHud(); if (world) world.start(); openSheet('levels', levelsHtml()); });
+$('startBtn').addEventListener('click', () => { $('title').classList.add('gone'); showHud(); if (world) world.start(); });
+
+(function boot() {
+  if (window.THREE) world = buildWorld();
+  if (world) { $('loading').textContent = 'Your world is ready.'; $('startBtn').disabled = false; }
+  else { $('loading').textContent = '3D could not start here. You can still use the level list.'; $('startBtn').hidden = true; $('nogl').hidden = false; }
+  if (Object.keys(state.done).length) {
+    const cur = currentLevel(), x = xp();
+    document.querySelector('.title .kicker').textContent = 'Welcome back, Sidi';
+    $('startBtn').textContent = cur ? `Continue at ${cur.zone}` : 'Return to the village';
+    if (world) $('loading').textContent = `${x.toLocaleString()} XP \u00b7 ${rankFor(x)[1]} \u00b7 ${LEVELS.filter(cleared).length} of 6 houses cleared`;
+  }
+  connect();
+})();
+</script>
+
+</body>
+</html>
